@@ -2,8 +2,8 @@
 
 import { PencilIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
-import { deleteRecord } from '@/app/lib/actions';
-import { useActionState, useState } from 'react';
+import { checkSession, deleteRecord } from '@/app/lib/actions';
+import { startTransition, useActionState, useState } from 'react';
 import { Spinner } from '@/app/ui/kits/spinner';
 import QRCodeGenerator from '@/app/ui/students/QRCodeGenerator';
 import Modal from '@/app/ui/kits/modal';
@@ -143,6 +143,27 @@ export function GenerateButton2({ student, students }: { student: Student; stude
             />
           </div>
         </Modal>
+      )}
+    </>
+  );
+}
+
+export function CheckButton({ id, date }: { id: string; date: string | null }) {
+  const [state, formAction, isPending] = useActionState(checkSession.bind(null, id, date), undefined);
+
+  return (
+    <>
+      <form onSubmit={(e) => { e.preventDefault(); startTransition(() => { formAction(); }); }} className="w-full flex flex-col items-center">
+        <button type="submit" className="rounded-lg border border-blue-500 p-3 bg-blue-600 text-white font-semibold shadow hover:bg-blue-400 focus:ring-2 focus:ring-blue-500 transition-all duration-200">
+          <span className="sr-only">Check</span>
+          {isPending ? <Spinner className="h-5 w-5 text-gray-200 animate-spin" /> : "تسجيل دخول/خروج"}
+        </button>
+      </form>
+
+      {state?.message && (
+        <div className="mt-2 text-sm text-red-600 font-medium bg-red-100 rounded px-3 py-2 shadow">
+          {state.message}
+        </div>
       )}
     </>
   );

@@ -76,6 +76,127 @@ export type State = {
   message?: string | null;
 };
 
+export async function checkSession(studentId: string, date?: string | null) {
+  try {
+    // Helper to add 3 hours
+    const getAdvancedDate = (d?: string | null) => {
+      const base = d ? new Date(d) : new Date();
+      base.setHours(base.getHours() + 3);
+      return base;
+    };
+    if (date) {
+      const advancedDate = getAdvancedDate(date);
+
+      // Check if the student exists in the students table
+      const studentExists = await sql`
+    SELECT 1
+    FROM students
+    WHERE id = ${studentId}
+  `;
+
+      if (studentExists.length === 0) {
+        return { message: "الطالب غير موجود. فشل إنشاء الجلسة." };
+      }
+
+      // Check if the student has an active session or is within the 10-minute interval
+      // const activeSession = await sql`
+      //   SELECT 1
+      //   FROM sessions
+      //   WHERE student_id = ${studentId}
+      //     AND (check_out IS NULL OR ${new Date()} - check_in <= INTERVAL '20 seconds')
+      // `;
+      const activeSession = await sql`
+    SELECT ${advancedDate} - check_in <= INTERVAL '10 minutes' AS is_active
+    FROM sessions
+    WHERE student_id = ${studentId}
+      AND (check_out IS NULL AND ${advancedDate} - check_in <= INTERVAL '10 minutes')
+  `;
+
+      // console.log("Active Session:", activeSession[0]?.is_active);
+      if (activeSession.length > 0) {
+        return {
+          message:
+            "لا يمكن تسجيل الدخول. يجب تسجيل الخروج أولاً والانتظار لمدة 10 دقائق.",
+        };
+      }
+
+      const result = await sql`
+    UPDATE sessions
+    SET check_out = ${advancedDate},
+        estimated_time = EXTRACT(EPOCH FROM ${advancedDate} - check_in) / 60
+    WHERE student_id = ${studentId} 
+      AND check_out IS NULL 
+      AND ${advancedDate} - check_in > INTERVAL '10 minutes'
+  `;
+
+      // Only insert a new session if no rows were updated
+      if (result.count === 0) {
+        await sql`
+      INSERT INTO sessions (student_id, check_in, estimated_time)
+      VALUES (${studentId}, ${advancedDate}, 60)
+    `;
+      }
+
+      revalidatePath("/dashboard/sessions");
+      return;
+    }
+    // Check if the student exists in the students table
+    const studentExists = await sql`
+      SELECT 1
+      FROM students
+      WHERE id = ${studentId}
+    `;
+
+    if (studentExists.length === 0) {
+      return { message: "الطالب غير موجود. فشل إنشاء الجلسة." };
+    }
+
+    // Check if the student has an active session or is within the 10-minute interval
+    // const activeSession = await sql`
+    //   SELECT 1
+    //   FROM sessions
+    //   WHERE student_id = ${studentId}
+    //     AND (check_out IS NULL OR ${new Date()} - check_in <= INTERVAL '20 seconds')
+    // `;
+    const activeSession = await sql`
+      SELECT ${getAdvancedDate()} - check_in <= INTERVAL '10 minutes' AS is_active
+      FROM sessions
+      WHERE student_id = ${studentId}
+        AND (check_out IS NULL AND ${getAdvancedDate()} - check_in <= INTERVAL '10 minutes')
+    `;
+
+    // console.log("Active Session:", activeSession[0]?.is_active);
+    if (activeSession.length > 0) {
+      return {
+        message:
+          "لا يمكن تسجيل الدخول. يجب تسجيل الخروج أولاً والانتظار لمدة 10 دقائق.",
+      };
+    }
+
+    const result = await sql`
+      UPDATE sessions
+      SET check_out = ${getAdvancedDate()},
+          estimated_time = EXTRACT(EPOCH FROM ${getAdvancedDate()} - check_in) / 60
+      WHERE student_id = ${studentId} 
+        AND check_out IS NULL 
+        AND ${getAdvancedDate()} - check_in > INTERVAL '10 minutes'
+    `;
+
+    // Only insert a new session if no rows were updated
+    if (result.count === 0) {
+      await sql`
+        INSERT INTO sessions (student_id, check_in, estimated_time)
+        VALUES (${studentId}, ${getAdvancedDate()}, 60)
+      `;
+    }
+
+    revalidatePath("/dashboard/sessions");
+  } catch (error) {
+    console.log(error);
+    return { message: "خطأ في قاعدة البيانات: فشل إنشاء الجلسة." };
+  }
+}
+
 export async function createSession(prevState: State, formData: FormData) {
   // Validate form fields using Zod
   const validatedFields = CreateSession.safeParse({

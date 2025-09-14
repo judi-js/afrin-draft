@@ -8,29 +8,36 @@ import { kufi } from '@/app/ui/fonts';
 import { fetchCardData } from '@/app/lib/data';
 
 const iconMap = {
-  collected: BanknotesIcon,
-  customers: UserGroupIcon,
-  pending: ClockIcon,
-  invoices: InboxIcon,
+  students: UserGroupIcon,
+  sessions: InboxIcon,
+  grades: InboxIcon,
 };
 
 export default async function CardWrapper() {
   const {
-    numberOfInvoices,
-    numberOfCustomers,
-    totalPaidInvoices,
-    totalPendingInvoices,
+    numberOfSessions,
+    numberOfStudents,
+    numberOfGrades,
+    averageSessionsPerStudent,
   } = await fetchCardData();
 
   return (
     <>
-      <Card title="Collected" value={totalPaidInvoices} type="collected" />
-      <Card title="Pending" value={totalPendingInvoices} type="pending" />
-      <Card title="Total Invoices" value={numberOfInvoices} type="invoices" />
       <Card
-        title="Total Customers"
-        value={numberOfCustomers}
-        type="customers"
+        title="عدد الطلاب"
+        value={numberOfStudents}
+        type="students"
+      />
+      <Card title="عدد الجلسات" value={numberOfSessions} type="sessions" />
+      <Card
+        title="عدد الجلسات (وسطياً)"
+        value={averageSessionsPerStudent}
+        type="grades"
+      />
+      <Card
+        title="عدد الصفوف"
+        value={numberOfGrades}
+        type="grades"
       />
     </>
   );
@@ -43,7 +50,7 @@ export function Card({
 }: {
   title: string;
   value: number | string;
-  type: 'invoices' | 'customers' | 'pending' | 'collected';
+  type: 'sessions' | 'students' | 'grades';
 }) {
   const Icon = iconMap[type];
 
@@ -51,7 +58,7 @@ export function Card({
     <div className="rounded-xl bg-gray-50 p-2 shadow-sm">
       <div className="flex p-4">
         {Icon ? <Icon className="h-5 w-5 text-gray-700" /> : null}
-        <h3 className="ml-2 text-sm font-medium">{title}</h3>
+        <h3 className="mr-2 text-sm font-medium">{title}</h3>
       </div>
       <p
         className={`${kufi.className}

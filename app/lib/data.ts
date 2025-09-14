@@ -56,29 +56,48 @@ export async function fetchCardData() {
     // You can probably combine these into a single SQL query
     // However, we are intentionally splitting them to demonstrate
     // how to initialize multiple queries in parallel with JS.
-    const invoiceCountPromise = sql`SELECT COUNT(*) FROM invoices`;
-    const customerCountPromise = sql`SELECT COUNT(*) FROM customers`;
-    const invoiceStatusPromise = sql`SELECT
-         SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END) AS "paid",
-         SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END) AS "pending"
-         FROM invoices`;
+    const numberOfSessionsPromise = sql<{ count: string }[]>`
+      SELECT COUNT(*) FROM sessions
+    `;
+    const numberOfStudentsPromise = sql<{ count: string }[]>`
+      SELECT COUNT(*) FROM students
+    `;
+    const numberOfGradesPromise = sql<{ grade_count: string }[]>`
+      SELECT COUNT(DISTINCT grade) AS grade_count
+      FROM students
+    `;
+    const averageSessionsPerStudentPromise = sql<{ avg: string }[]>`
+      SELECT AVG(session_count) AS avg
+      FROM (
+        SELECT COUNT(*) AS session_count
+        FROM sessions
+        GROUP BY student_id
+      ) AS session_counts;
+    `;
 
     const data = await Promise.all([
-      invoiceCountPromise,
-      customerCountPromise,
-      invoiceStatusPromise,
+      numberOfSessionsPromise,
+      numberOfStudentsPromise,
+      numberOfGradesPromise,
+      averageSessionsPerStudentPromise,
     ]);
 
-    const numberOfInvoices = Number(data[0].count ?? "0");
-    const numberOfCustomers = Number(data[1].count ?? "0");
-    const totalPaidInvoices = formatCurrency(data[2][0].paid ?? "0");
-    const totalPendingInvoices = formatCurrency(data[2][0].pending ?? "0");
+    const numberOfSessions = Number(
+      data[0][0]?.count || "0"
+    );
+    const numberOfStudents = Number(
+      data[1][0]?.count || "0"
+    );
+    const numberOfGrades = Number(data[2][0]?.grade_count ?? "0");
+    const averageSessionsPerStudent = Number(
+      data[3][0]?.avg || "0"
+    ).toFixed(0);
 
     return {
-      numberOfCustomers,
-      numberOfInvoices,
-      totalPaidInvoices,
-      totalPendingInvoices,
+      numberOfSessions,
+      numberOfStudents,
+      numberOfGrades,
+      averageSessionsPerStudent,
     };
   } catch (error) {
     console.error("Database Error:", error);
