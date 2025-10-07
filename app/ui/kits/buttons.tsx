@@ -3,11 +3,12 @@
 import { PencilIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import { checkSession, deleteRecord } from '@/app/lib/actions';
-import { startTransition, useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { Spinner } from '@/app/ui/kits/spinner';
 import QRCodeGenerator from '@/app/ui/students/QRCodeGenerator';
 import Modal from '@/app/ui/kits/modal';
 import { Student } from '@/app/lib/definitions';
+import { Button } from '@/app/ui/kits/button';
 
 export function CreateButton({ entity }: { entity: "students" | "sessions" }) {
   return (
@@ -49,7 +50,7 @@ export function DeleteButton({ id, tableName }: { id: string; tableName: string 
 
   return (
     <form action={formAction}>
-      <button type="submit" className="rounded-md border p-2 hover:bg-gray-100">
+      <button type="submit" disabled={isPending} aria-disabled={isPending} className="rounded-md border p-2 hover:bg-gray-100 aria-disabled:cursor-not-allowed aria-disabled:opacity-50">
         <span className="sr-only">Delete</span>
         {isPending ? <Spinner className="h-5 w-5 text-gray-400" /> : <TrashIcon className="w-5" />}
       </button>
@@ -63,7 +64,7 @@ export function DeleteButton2({ id, tableName }: { id: string; tableName: string
 
   return (
     <form action={formAction}>
-      <button type="submit" className="text-sm text-red-500 hover:underline">
+      <button type="submit" disabled={isPending} aria-disabled={isPending} className="text-sm text-red-500 hover:underline aria-disabled:cursor-not-allowed aria-disabled:opacity-50">
         {isPending ? <Spinner className="h-5 w-5 text-gray-400" /> : <span className="">حذف</span>}
       </button>
     </form>
@@ -148,23 +149,71 @@ export function GenerateButton2({ student, students }: { student: Student; stude
   );
 }
 
-export function CheckButton({ id, date }: { id: string; date: string | null }) {
-  const [state, formAction, isPending] = useActionState(checkSession.bind(null, id, date), undefined);
+function CheckInButton({ id, date, onMessage }: { id: string; date: string | null; onMessage: (msg: string | null) => void }) {
+  const [state, formAction, isPending] = useActionState(
+    checkSession.bind(null, id, "check_in", date),
+    undefined
+  );
+
+  useEffect(() => {
+    if (state?.message) onMessage(state.message);
+  }, [state, onMessage]);
 
   return (
-    <>
-      <form onSubmit={(e) => { e.preventDefault(); startTransition(() => { formAction(); }); }} className="w-full flex flex-col items-center">
-        <button type="submit" className="rounded-lg border border-blue-500 p-3 bg-blue-600 text-white font-semibold shadow hover:bg-blue-400 focus:ring-2 focus:ring-blue-500 transition-all duration-200">
-          <span className="sr-only">Check</span>
-          {isPending ? <Spinner className="h-5 w-5 text-gray-200 animate-spin" /> : "تسجيل دخول/خروج"}
-        </button>
-      </form>
+    <form action={formAction} className="w-full flex flex-col items-center">
+      <Button
+        disabled={isPending}
+        aria-disabled={isPending}
+        type="submit"
+        className="rounded-lg border border-green-500 p-3 bg-green-600 text-white font-semibold shadow hover:bg-green-400 focus:ring-2 focus:ring-green-500 transition-all duration-200"
+      >
+        <span className="sr-only">Check In</span>
+        {isPending ? <Spinner className="h-5 w-5 text-gray-200 animate-spin" /> : "دخول"}
+      </Button>
+    </form>
+  );
+}
 
-      {state?.message && (
-        <div className="mt-2 text-sm text-red-600 font-medium bg-red-100 rounded px-3 py-2 shadow">
-          {state.message}
+function CheckOutButton({ id, date, onMessage }: { id: string; date: string | null; onMessage: (msg: string | null) => void }) {
+  const [state, formAction, isPending] = useActionState(
+    checkSession.bind(null, id, "check_out", date),
+    undefined
+  );
+
+  useEffect(() => {
+    if (state?.message) onMessage(state.message);
+  }, [state, onMessage]);
+
+  return (
+    <form action={formAction} className="w-full flex flex-col items-center">
+      <Button
+        disabled={isPending}
+        aria-disabled={isPending}
+        type="submit"
+        className="rounded-lg border border-red-500 p-3 bg-red-600 text-white font-semibold shadow hover:bg-red-400 focus:ring-2 focus:ring-red-500 transition-all duration-200"
+      >
+        <span className="sr-only">Check Out</span>
+        {isPending ? <Spinner className="h-5 w-5 text-gray-200 animate-spin" /> : "خروج"}
+      </Button>
+    </form>
+  );
+}
+
+export function CheckButton({ id, date }: { id: string; date: string | null }) {
+  const [message, setMessage] = useState<string | null>(null);
+
+  return (
+    <div className="flex flex-col items-center gap-2 w-full">
+      <div className="flex flex-col sm:flex-row gap-2 justify-center">
+        <CheckInButton id={id} date={date} onMessage={setMessage} />
+        <CheckOutButton id={id} date={date} onMessage={setMessage} />
+      </div>
+
+      {message && (
+        <div className="text-center mt-2 text-sm text-red-600 font-medium bg-red-100 rounded px-3 py-2 shadow w-full sm:w-auto">
+          {message}
         </div>
       )}
-    </>
+    </div>
   );
 }

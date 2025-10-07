@@ -1,10 +1,10 @@
-import { fetchStudents } from '@/app/lib/data';
 import Form from '@/app/ui/students/create-form';
 import Breadcrumbs from '@/app/ui/kits/breadcrumbs';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Create Student',
+  title: 'إضافة طالب',
+  description: 'صفحة إضافة طالب جديد',
 };
 
 export default function Page() {

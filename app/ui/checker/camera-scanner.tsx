@@ -20,7 +20,7 @@ const CameraScanner: React.FC<{ onScan: (data: string) => void, setQrData: Dispa
         }
         scanLoop();
       } catch {
-        setError('Camera access denied or not available.');
+        setError('يجب منح الإذن لاستخدام الكاميرا');
       }
     };
 
@@ -78,7 +78,7 @@ const CameraScanner: React.FC<{ onScan: (data: string) => void, setQrData: Dispa
         )}
       </div>
       <canvas ref={canvasRef} style={{ display: 'none' }} />
-      {error && <div className="text-red-500 mt-2 font-semibold bg-red-100 rounded px-3 py-2 shadow">{error}</div>}
+      {error && <div className="w-full text-red-500 mt-2 font-semibold bg-red-100 rounded px-3 py-2 shadow">{error}</div>}
     </div>
   );
 };

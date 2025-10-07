@@ -1,13 +1,13 @@
 import '@/app/ui/global.css';
-import { kufi } from '@/app/ui/fonts';
 import { Metadata } from 'next';
+import Providers from './providers';
 
 export const metadata: Metadata = {
   title: {
-    template: '%s | Afrin Dashboard',
-    default: 'Afrin Dashboard',
+    template: 'معهد عفرين | %s',
+    default: 'معهد عفرين',
   },
-  description: 'A dashboard application built to manage your institution seamlessly.',
+  description: 'منصة جلسات الطلاب.',
   metadataBase: new URL('https://afrin-academy.vercel.app'),
   keywords: ['dashboard', 'management', 'institution'],
 };
@@ -18,7 +18,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar">
-      <body dir="rtl" className={`${kufi.className} antialiased`}>{children}</body>
+      <body dir="rtl" className="font-kufi antialiased">
+        <Providers>
+          {children}
+        </Providers>
+      </body>
     </html>
   );
 }

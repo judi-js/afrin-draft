@@ -5,7 +5,9 @@ import { notFound } from 'next/navigation';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Edit Session',
+  title: 'تعديل الطالب',
+  description: 'صفحة تعديل بيانات الطالب',
+  keywords: 'تعديل, طالب, بيانات',
 };
 
 export default async function Page(props: { params: Promise<{ id: string }> }) {

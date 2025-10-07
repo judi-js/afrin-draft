@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { signIn } from "@/auth";
 import { AuthError } from "next-auth";
+import { formatEstimatedTime } from "./utils";
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
 
@@ -20,14 +21,18 @@ const FormSchema = z.object({
 
 const StudentFormSchema = z
   .object({
-    first_name: z.string({
-      required_error: "الاسم الاول مطلوب.",
-      invalid_type_error: "الاسم الأول يجب أن يكون نصاً.",
-    }).min(3, "يجب أن يكون الاسم الاول مؤلفاً من ثلاثة حروف على الأقل."),
-    last_name: z.string({
-      required_error: "اسم العائلة مطلوب.",
-      invalid_type_error: "اسم العائلة يجب أن يكون نصاً.",
-    }).min(3, "يجب أن يكون اسم العائلة مؤلفاً من ثلاثة حروف على الأقل."),
+    first_name: z
+      .string({
+        required_error: "الاسم الاول مطلوب.",
+        invalid_type_error: "الاسم الأول يجب أن يكون نصاً.",
+      })
+      .min(3, "يجب أن يكون الاسم الاول مؤلفاً من ثلاثة حروف على الأقل."),
+    last_name: z
+      .string({
+        required_error: "اسم العائلة مطلوب.",
+        invalid_type_error: "اسم العائلة يجب أن يكون نصاً.",
+      })
+      .min(3, "يجب أن يكون اسم العائلة مؤلفاً من ثلاثة حروف على الأقل."),
     grade: z.string({
       invalid_type_error: "اختر صفاً من فضلك.",
     }),
@@ -76,124 +81,131 @@ export type State = {
   message?: string | null;
 };
 
-export async function checkSession(studentId: string, date?: string | null) {
+export async function checkSession(
+  studentId: string,
+  action: "check_in" | "check_out",
+  date?: string | null
+) {
   try {
-    // Helper to add 3 hours
     const getAdvancedDate = (d?: string | null) => {
       const base = d ? new Date(d) : new Date();
       base.setHours(base.getHours() + 3);
       return base;
     };
-    if (date) {
-      const advancedDate = getAdvancedDate(date);
 
-      // Check if the student exists in the students table
-      const studentExists = await sql`
-    SELECT 1
-    FROM students
-    WHERE id = ${studentId}
-  `;
+    const advancedDate = getAdvancedDate(date);
 
-      if (studentExists.length === 0) {
-        return { message: "الطالب غير موجود. فشل إنشاء الجلسة." };
-      }
-
-      // Check if the student has an active session or is within the 10-minute interval
-      // const activeSession = await sql`
-      //   SELECT 1
-      //   FROM sessions
-      //   WHERE student_id = ${studentId}
-      //     AND (check_out IS NULL OR ${new Date()} - check_in <= INTERVAL '20 seconds')
-      // `;
-      const activeSession = await sql`
-    SELECT ${advancedDate} - check_in <= INTERVAL '10 minutes' AS is_active
-    FROM sessions
-    WHERE student_id = ${studentId}
-      AND (check_out IS NULL AND ${advancedDate} - check_in <= INTERVAL '10 minutes')
-  `;
-
-      // console.log("Active Session:", activeSession[0]?.is_active);
-      if (activeSession.length > 0) {
-        return {
-          message:
-            "لا يمكن تسجيل الدخول. يجب تسجيل الخروج أولاً والانتظار لمدة 10 دقائق.",
-        };
-      }
-
-      const result = await sql`
-    UPDATE sessions
-    SET check_out = ${advancedDate},
-        estimated_time = EXTRACT(EPOCH FROM ${advancedDate} - check_in) / 60
-    WHERE student_id = ${studentId} 
-      AND check_out IS NULL 
-      AND ${advancedDate} - check_in > INTERVAL '10 minutes'
-  `;
-
-      // Only insert a new session if no rows were updated
-      if (result.count === 0) {
-        await sql`
-      INSERT INTO sessions (student_id, check_in, estimated_time)
-      VALUES (${studentId}, ${advancedDate}, 60)
-    `;
-      }
-
-      revalidatePath("/dashboard/sessions");
-      return;
-    }
-    // Check if the student exists in the students table
+    // 1. Check if the student exists
     const studentExists = await sql`
-      SELECT 1
-      FROM students
-      WHERE id = ${studentId}
+      SELECT 1 FROM students WHERE id = ${studentId}
     `;
-
     if (studentExists.length === 0) {
       return { message: "الطالب غير موجود. فشل إنشاء الجلسة." };
     }
 
-    // Check if the student has an active session or is within the 10-minute interval
-    // const activeSession = await sql`
-    //   SELECT 1
-    //   FROM sessions
-    //   WHERE student_id = ${studentId}
-    //     AND (check_out IS NULL OR ${new Date()} - check_in <= INTERVAL '20 seconds')
-    // `;
-    const activeSession = await sql`
-      SELECT ${getAdvancedDate()} - check_in <= INTERVAL '10 minutes' AS is_active
-      FROM sessions
-      WHERE student_id = ${studentId}
-        AND (check_out IS NULL AND ${getAdvancedDate()} - check_in <= INTERVAL '10 minutes')
-    `;
+    if (action === "check_in") {
+      // 2. Prevent overlapping sessions
+      const overlap = await sql`
+        SELECT 1
+        FROM sessions
+        WHERE student_id = ${studentId}
+          AND (
+            (${advancedDate} BETWEEN check_in AND check_out)
+            OR (check_out IS NULL AND ${advancedDate} <= check_in)
+          )
+      `;
+      if (overlap.length > 0) {
+        return {
+          message: `لا يمكن تسجيل الدخول في ${
+            date
+              ? new Date(date).toLocaleString("ar-SY")
+              : new Date().toLocaleString("ar-SY")
+          } لأنه يتداخل مع جلسة موجودة.`,
+        };
+      }
 
-    // console.log("Active Session:", activeSession[0]?.is_active);
-    if (activeSession.length > 0) {
+      // 3. Block if the last session is still open
+      const lastOpen = await sql`
+        SELECT 1
+        FROM sessions
+        WHERE student_id = ${studentId}
+          AND check_out IS NULL
+        LIMIT 1
+      `;
+      if (lastOpen.length > 0) {
+        return {
+          message: "لا يمكن تسجيل الدخول. يوجد جلسة سابقة لم يتم تسجيل الخروج منها بعد.",
+        };
+      }
+
+      // 4. Insert a new check-in
+      const insertResult = await sql`
+        INSERT INTO sessions (student_id, check_in, estimated_time)
+        VALUES (${studentId}, ${advancedDate}, 60)
+        RETURNING check_in
+      `;
+      const { check_in } = insertResult[0];
       return {
-        message:
-          "لا يمكن تسجيل الدخول. يجب تسجيل الخروج أولاً والانتظار لمدة 10 دقائق.",
+        message: `تم تسجيل الدخول في ${new Date(check_in).toLocaleString(
+          "ar-SY"
+        )}.`,
       };
     }
 
-    const result = await sql`
-      UPDATE sessions
-      SET check_out = ${getAdvancedDate()},
-          estimated_time = EXTRACT(EPOCH FROM ${getAdvancedDate()} - check_in) / 60
-      WHERE student_id = ${studentId} 
-        AND check_out IS NULL 
-        AND ${getAdvancedDate()} - check_in > INTERVAL '10 minutes'
-    `;
-
-    // Only insert a new session if no rows were updated
-    if (result.count === 0) {
-      await sql`
-        INSERT INTO sessions (student_id, check_in, estimated_time)
-        VALUES (${studentId}, ${getAdvancedDate()}, 60)
+    if (action === "check_out") {
+      // 5. Get the last session
+      const lastSession = await sql`
+        SELECT id, check_in, check_out
+        FROM sessions
+        WHERE student_id = ${studentId}
+        ORDER BY check_in DESC
+        LIMIT 1
       `;
+
+      if (lastSession.length === 0) {
+        return { message: "لا يمكن تسجيل الخروج لأنه لا توجد جلسة مفتوحة." };
+      }
+
+      const { id, check_out } = lastSession[0];
+
+      if (check_out !== null) {
+        return { message: "لا يمكن تسجيل الخروج. آخر جلسة مسجلة مغلقة بالفعل." };
+      }
+
+      // 6. Update only if at least 10 minutes have passed
+      const result = await sql`
+        UPDATE sessions
+        SET check_out = ${advancedDate},
+            estimated_time = EXTRACT(EPOCH FROM ${advancedDate} - check_in) / 60
+        WHERE id = ${id}
+          AND ${advancedDate} - check_in >= INTERVAL '10 minutes'
+        RETURNING check_out, estimated_time
+      `;
+
+      if (result.length === 0) {
+        return {
+          message: "لا يمكن تسجيل الخروج. يجب أن تمر 10 دقائق على الأقل بعد تسجيل الدخول.",
+        };
+      }
+
+      const { check_out: co, estimated_time } = result[0];
+      return {
+        message: `تم تسجيل الخروج في ${new Date(co).toLocaleString(
+          "ar-SY"
+        )}، والمدة المقدرة: ${formatEstimatedTime(
+          +estimated_time,
+          "full"
+        )}.`,
+      };
     }
 
-    revalidatePath("/dashboard/sessions");
+    return { message: "إجراء غير صالح." };
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return { message: "خطأ في قاعدة البيانات: فشل إنشاء الجلسة." };
+  } finally {
+    revalidatePath("/dashboard/sessions");
+    revalidatePath("/dashboard");
   }
 }
 
@@ -277,9 +289,10 @@ export async function createSession(prevState: State, formData: FormData) {
     };
   }
 
-  // Revalidate the cache for the students page and redirect the user.
-  revalidatePath("/dashboard/students");
-  redirect("/dashboard/students");
+  // Revalidate the cache for the sessions page and redirect the user.
+  revalidatePath("/dashboard/sessions");
+  revalidatePath("/dashboard");
+  redirect("/dashboard/sessions");
 }
 
 export async function createStudent(
@@ -321,6 +334,9 @@ export async function createStudent(
 
   // Revalidate the cache for the students page and redirect the user.
   revalidatePath("/dashboard/students");
+  revalidatePath("/dashboard/sessions");
+  revalidatePath("/dashboard/register");
+  revalidatePath("/dashboard");
   redirect("/dashboard/students");
 }
 
@@ -352,7 +368,9 @@ export async function updateStudent(
   try {
     await sql`
       UPDATE students
-      SET first_name = ${first_name}, last_name = ${last_name}, grade = ${grade}, department = ${department ?? null}
+      SET first_name = ${first_name}, last_name = ${last_name}, grade = ${grade}, department = ${
+      department ?? null
+    }
       WHERE id = ${id}
     `;
   } catch (error) {
@@ -365,6 +383,9 @@ export async function updateStudent(
 
   // Revalidate the cache for the students page and redirect the user.
   revalidatePath("/dashboard/students");
+  revalidatePath("/dashboard/sessions");
+  revalidatePath("/dashboard/register");
+  revalidatePath("/dashboard");
   redirect("/dashboard/students");
 }
 
@@ -444,16 +465,13 @@ export async function updateSession(
       WHERE id = ${id}
     `;
   } catch (error) {
+    console.error("DB Insert Error:", error);
     return { message: "خطأ في قاعدة البيانات: فشل في تحديث الجلسة." };
   }
 
   revalidatePath("/dashboard/sessions");
+  revalidatePath("/dashboard");
   redirect("/dashboard/sessions");
-}
-
-export async function deleteSession(id: string) {
-  await sql`DELETE FROM sessions WHERE id = ${id}`;
-  revalidatePath("/dashboard/sessions");
 }
 
 export async function authenticate(
@@ -466,9 +484,9 @@ export async function authenticate(
     if (error instanceof AuthError) {
       switch (error.type) {
         case "CredentialsSignin":
-          return "Invalid credentials.";
+          return "خطأ في تسجيل الدخول. يرجى التحقق من البيانات الخاصة بك.";
         default:
-          return "Something went wrong.";
+          return "حدث خطأ ما أثناء تسجيل الدخول.";
       }
     }
     throw error;
@@ -479,4 +497,8 @@ export async function deleteRecord(id: string, tableName: string) {
   console.log(tableName);
   await sql`DELETE FROM ${sql(tableName)} WHERE id = ${id}`;
   revalidatePath("/dashboard/students");
+  revalidatePath("/dashboard/sessions");
+  revalidatePath("/dashboard/register");
+  revalidatePath("/dashboard");
+  revalidatePath("/sessions");
 }

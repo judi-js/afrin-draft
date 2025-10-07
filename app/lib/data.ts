@@ -1,53 +1,78 @@
 import postgres from "postgres";
 import {
   StudentField,
-  InvoiceForm,
-  LatestInvoiceRaw,
-  Revenue,
-  SessionsTable,
   Student,
   Session,
-} from "./definitions";
-import { formatCurrency } from "./utils";
+  LatestStudent,
+  FormattedSessionsTable,
+} from "@/app/lib/definitions";
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
 
-export async function fetchRevenue() {
+export async function fetchStudentsCount() {
   try {
-    // Artificially delay a response for demo purposes.
-    // Don't do this in production :)
+    const data = await sql<
+      {
+        month_name: string;
+        year: number;
+        cumulative_count: number;
+      }[]
+    >`
+      WITH first_month AS (
+        -- Get the first student's created_at month (truncated to month)
+        SELECT DATE_TRUNC('month', MIN(created_at)) AS start_month
+        FROM students
+      ),
+      months AS (
+        -- Generate 12 months starting from that first month
+        SELECT generate_series(
+          (SELECT start_month FROM first_month),
+          (SELECT start_month FROM first_month) + interval '11 month',
+          interval '1 month'
+        ) AS month
+      ),
+      monthly AS (
+        -- Count students per month
+        SELECT 
+          DATE_TRUNC('month', created_at) AS month,
+          COUNT(*) AS monthly_count
+        FROM students
+        GROUP BY DATE_TRUNC('month', created_at)
+      )
+      SELECT 
+        TO_CHAR(m.month, 'Month') AS month_name,
+        EXTRACT(YEAR FROM m.month)::int AS year,
+        COALESCE(SUM(monthly_count) OVER (
+          ORDER BY m.month
+          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ), 0) AS cumulative_count
+      FROM months m
+      LEFT JOIN monthly s ON m.month = s.month
+      ORDER BY m.month;
+    `;
 
-    // console.log('Fetching revenue data...');
-    // await new Promise((resolve) => setTimeout(resolve, 3000));
+    // Extract distinct years for convenience
+    const years = Array.from(new Set(data.map((d) => d.year)));
 
-    const data = await sql<Revenue[]>`SELECT * FROM revenue`;
+    return { data, years };
+  } catch (error) {
+    console.error("Database Error:", error);
+    throw new Error("Failed to fetch student count data.");
+  }
+}
 
-    // console.log('Data fetch completed after 3 seconds.');
+export async function fetchLatestStudents() {
+  try {
+    const data = await sql<LatestStudent[]>`
+      SELECT *
+      FROM students
+      ORDER BY students.created_at DESC
+      LIMIT 5`;
 
     return data;
   } catch (error) {
     console.error("Database Error:", error);
-    throw new Error("Failed to fetch revenue data.");
-  }
-}
-
-export async function fetchLatestInvoices() {
-  try {
-    const data = await sql<LatestInvoiceRaw[]>`
-      SELECT invoices.amount, customers.name, customers.image_url, customers.email, invoices.id
-      FROM invoices
-      JOIN customers ON invoices.customer_id = customers.id
-      ORDER BY invoices.date DESC
-      LIMIT 5`;
-
-    const latestInvoices = data.map((invoice) => ({
-      ...invoice,
-      amount: formatCurrency(invoice.amount),
-    }));
-    return latestInvoices;
-  } catch (error) {
-    console.error("Database Error:", error);
-    throw new Error("Failed to fetch the latest invoices.");
+    throw new Error("Failed to fetch the latest students.");
   }
 }
 
@@ -82,16 +107,10 @@ export async function fetchCardData() {
       averageSessionsPerStudentPromise,
     ]);
 
-    const numberOfSessions = Number(
-      data[0][0]?.count || "0"
-    );
-    const numberOfStudents = Number(
-      data[1][0]?.count || "0"
-    );
+    const numberOfSessions = Number(data[0][0]?.count || "0");
+    const numberOfStudents = Number(data[1][0]?.count || "0");
     const numberOfGrades = Number(data[2][0]?.grade_count ?? "0");
-    const averageSessionsPerStudent = Number(
-      data[3][0]?.avg || "0"
-    ).toFixed(0);
+    const averageSessionsPerStudent = Number(data[3][0]?.avg || "0").toFixed(0);
 
     return {
       numberOfSessions,
@@ -108,12 +127,23 @@ export async function fetchCardData() {
 const ITEMS_PER_PAGE = 6;
 export async function fetchFilteredSessions(
   query: string,
-  currentPage: number
+  currentPage: number,
+  from: string,
+  to: string
 ) {
   const offset = (currentPage - 1) * ITEMS_PER_PAGE;
 
   try {
-    const sessions = await sql<SessionsTable[]>`
+    let dateFilter = sql``;
+    if (from && to) {
+      dateFilter = sql`AND sessions.check_in >= ${from} AND sessions.check_in <= ${to}`;
+    } else if (from) {
+      dateFilter = sql`AND sessions.check_in >= ${from}`;
+    } else if (to) {
+      dateFilter = sql`AND sessions.check_in <= ${to}`;
+    }
+
+    const sessions = await sql<FormattedSessionsTable[]>`
       SELECT
         sessions.id,
         sessions.check_in,
@@ -125,11 +155,13 @@ export async function fetchFilteredSessions(
         students.department
       FROM sessions
       JOIN students ON sessions.student_id = students.id
-      WHERE
-        students.first_name ILIKE ${`%${query}%`} OR
+      WHERE (
+      students.first_name ILIKE ${`%${query}%`} OR
         students.last_name ILIKE ${`%${query}%`} OR
         students.grade ILIKE ${`%${query}%`} OR
         students.department ILIKE ${`%${query}%`}
+      )
+      ${dateFilter}
       ORDER BY sessions.check_in DESC
       LIMIT ${ITEMS_PER_PAGE} OFFSET ${offset}
     `;
@@ -177,28 +209,106 @@ export async function fetchStudentsPages(query: string) {
       students.department ILIKE ${`%${query}%`}
   `;
 
-    const totalPages = Math.ceil(Number(data[0].count) / ITEMS_PER_PAGE);
-    return totalPages;
+    const totalStudents = Number(data[0].count);
+    const totalPages = Math.ceil(totalStudents / ITEMS_PER_PAGE);
+    return { totalPages, totalStudents };
   } catch (error) {
     console.error("Database Error:", error);
     throw new Error("Failed to fetch total number of students.");
   }
 }
 
-export async function fetchSessionsPages(query: string) {
+export async function fetchFilteredSessionsByStudent(
+  query: string,
+  currentPage: number,
+  id: string
+) {
+  const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+
+  try {
+    const sessions = await sql<FormattedSessionsTable[]>`
+      SELECT
+        sessions.id,
+        sessions.check_in,
+        sessions.check_out,
+        sessions.estimated_time,
+        students.first_name,
+        students.last_name,
+        students.grade,
+        students.department
+      FROM sessions
+      JOIN students ON sessions.student_id = students.id
+      WHERE
+        sessions.student_id = ${id} AND (
+        students.first_name ILIKE ${`%${query}%`} OR
+        students.last_name ILIKE ${`%${query}%`} OR
+        students.grade ILIKE ${`%${query}%`} OR
+        students.department ILIKE ${`%${query}%`}
+      )
+      ORDER BY sessions.check_in DESC
+      LIMIT ${ITEMS_PER_PAGE} OFFSET ${offset}
+    `;
+
+    return sessions;
+  } catch (error) {
+    console.error("Database Error:", error);
+    throw new Error("Failed to fetch sessions.");
+  }
+}
+
+export async function fetchSessionsByStudentPages(query: string, id: string) {
   try {
     const data = await sql`SELECT COUNT(*)
     FROM sessions
     JOIN students ON sessions.student_id = students.id
     WHERE
+      sessions.student_id = ${id} AND (
       students.first_name ILIKE ${`%${query}%`} OR
       students.last_name ILIKE ${`%${query}%`} OR
       students.grade ILIKE ${`%${query}%`} OR
       students.department ILIKE ${`%${query}%`}
+    )
   `;
 
-    const totalPages = Math.ceil(Number(data[0].count) / ITEMS_PER_PAGE);
-    return totalPages;
+    const totalSessions = Number(data[0].count);
+    const totalPages = Math.ceil(totalSessions / ITEMS_PER_PAGE);
+    return { totalPages, totalSessions };
+  } catch (error) {
+    console.error("Database Error:", error);
+    throw new Error("Failed to fetch total number of sessions.");
+  }
+}
+
+export async function fetchSessionsPages(
+  query: string,
+  from: string,
+  to: string
+) {
+  try {
+    let dateFilter = sql``;
+    if (from && to) {
+      dateFilter = sql`AND sessions.check_in >= ${from} AND sessions.check_in <= ${to}`;
+    } else if (from) {
+      dateFilter = sql`AND sessions.check_in >= ${from}`;
+    } else if (to) {
+      dateFilter = sql`AND sessions.check_in <= ${to}`;
+    }
+
+    const data = await sql`SELECT COUNT(*)
+    FROM sessions
+    JOIN students ON sessions.student_id = students.id
+    WHERE (
+      students.first_name ILIKE ${`%${query}%`} OR
+      students.last_name ILIKE ${`%${query}%`} OR
+      students.grade ILIKE ${`%${query}%`} OR
+      students.department ILIKE ${`%${query}%`}
+    )
+    ${dateFilter}
+  `;
+
+    const totalSessions = Number(data[0].count);
+    const totalPages = Math.ceil(totalSessions / ITEMS_PER_PAGE);
+    return { totalPages, totalSessions };
   } catch (error) {
     console.error("Database Error:", error);
     throw new Error("Failed to fetch total number of sessions.");
@@ -255,3 +365,64 @@ export async function fetchStudentById(id: string) {
     throw new Error("Failed to fetch student.");
   }
 }
+
+// export async function fetchFilteredSessions(
+//   query: string,
+//   currentPage: number,
+//   from?: string,
+//   to?: string
+// ) {
+//   const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+//   const whereClauses = [];
+//   const params = [];
+
+//   if (from) {
+//     whereClauses.push(`sessions.check_in >= $${params.length + 1}`);
+//     params.push(from);
+//   }
+
+//   if (to) {
+//     whereClauses.push(`sessions.check_in <= $${params.length + 1}`);
+//     params.push(to);
+//   }
+
+//   if (query) {
+//     whereClauses.push(`(
+//       students.first_name ILIKE $${params.length + 1} OR
+//       students.last_name ILIKE $${params.length + 2} OR
+//       students.grade ILIKE $${params.length + 3} OR
+//       students.department ILIKE $${params.length + 4}
+//     )`);
+//     params.push(`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`);
+//   }
+
+//   const whereSQL =
+//     whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
+//   try {
+//     const sessions = await sql.unsafe(
+//       `
+//       SELECT
+//         sessions.id,
+//         sessions.check_in,
+//         sessions.check_out,
+//         sessions.estimated_time,
+//         students.first_name,
+//         students.last_name,
+//         students.grade,
+//         students.department
+//       FROM sessions
+//       JOIN students ON sessions.student_id = students.id
+//       ${whereSQL}
+//       ORDER BY sessions.check_in DESC
+//       LIMIT ${ITEMS_PER_PAGE} OFFSET ${offset}
+//     `,
+//       params
+//     );
+
+//     return sessions;
+//   } catch (error) {
+//     console.error("Database Error:", error);
+//     throw new Error("Failed to fetch sessions.");
+//   }
+// }

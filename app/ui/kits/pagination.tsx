@@ -4,12 +4,26 @@ import { ArrowLeftIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 import Link from 'next/link';
 import { usePagination } from '@/app/hooks/usePagination';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function Pagination({ totalPages }: { totalPages: number }) {
-  const { allPages, createPageURL, currentPage, isFirstPage, isLastPage } = usePagination(totalPages);;
+  const [isBigScreen, setIsBigScreen] = useState(false);
+
+  useEffect(() => {
+    const checkScreen = () => setIsBigScreen(window.innerWidth >= 768);
+    checkScreen();
+    window.addEventListener('resize', checkScreen);
+    return () => window.removeEventListener('resize', checkScreen);
+  }, []);
+  const { allPages, createPageURL, currentPage, isFirstPage, isLastPage } = usePagination(totalPages, isBigScreen);
+  const router = useRouter();
+  useEffect(() => {
+    router.refresh();
+  }, [router]);
 
   return (
-    <div className="inline-flex">
+    <div className="inline-flex max-sm:text-xs">
       <PaginationArrow
         direction="left"
         href={createPageURL(currentPage - 1)}

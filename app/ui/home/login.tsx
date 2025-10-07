@@ -23,7 +23,7 @@ export default function LoginForm({ id }: { id: string }) {
     <form onSubmit={handleSubmit} className="space-y-3">
       <div className="flex-1 rounded-lg bg-gray-50 px-6 pb-4 pt-8">
         <input type="hidden" name="redirectTo" value="/" />
-        <Button className="mt-4 w-full" aria-disabled={isPending}>
+        <Button className="mt-4 w-full" disabled={isPending} aria-disabled={isPending}>
           تسجيل الدخول
           {isPending
             ? <Spinner className="mr-auto h-5 w-5 text-gray-50" />

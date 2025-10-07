@@ -4,7 +4,9 @@ import Breadcrumbs from '@/app/ui/kits/breadcrumbs';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Create Invoice',
+  title: 'اضافة جلسة',
+  description: 'صفحة إضافة جلسة جديدة',
+  keywords: 'جلسة, إضافة, تعليم',
 };
 
 export default async function Page() {

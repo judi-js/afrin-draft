@@ -15,7 +15,6 @@ function ManualScanner({ onSelect, students, setDate }: { onSelect: (id: string)
     }
   }
 
-  console.log(selectedDate)
   return (
     <div className="font-sans grid items-center justify-items-center gap-6 p-6 rounded-xl max-w-sm mx-auto">
       <div className="mb-4 w-full">

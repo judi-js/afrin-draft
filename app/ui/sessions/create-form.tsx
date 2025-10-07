@@ -134,7 +134,7 @@ export default function Form({ students }: { students: StudentField[] }) {
         >
           إلغاء
         </Link>
-        <Button type="submit" disabled={isPending}>
+        <Button type="submit" disabled={isPending} aria-disabled={isPending}>
           {isPending ? 'جاري الإضافة...' : 'إضافة جلسة'}
         </Button>
       </div>

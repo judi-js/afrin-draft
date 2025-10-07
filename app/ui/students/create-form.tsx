@@ -162,7 +162,7 @@ export default function Form() {
         >
           إلغاء
         </Link>
-        <Button type="submit" disabled={isPending}>
+        <Button type="submit" disabled={isPending} aria-disabled={isPending}>
           {isPending ? 'جاري الإضافة...' : 'إضافة طالب'}
         </Button>
       </div>

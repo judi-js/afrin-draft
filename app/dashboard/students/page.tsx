@@ -2,14 +2,13 @@ import { fetchStudentsPages } from '@/app/lib/data';
 import Pagination from '@/app/ui/kits/pagination';
 import CustomersTable from '@/app/ui/students/table';
 import { Metadata } from 'next';
-import { kufi } from '@/app/ui/fonts';
 import Search from '@/app/ui/kits/search';
 import { CreateButton } from '@/app/ui/kits/buttons';
 import { Suspense } from 'react';
 import { StudentsTableSkeleton } from '@/app/ui/kits/skeletons';
 
 export const metadata: Metadata = {
-  title: 'Students',
+  title: 'الطلاب',
 };
 
 export default async function Page(props: {
@@ -22,11 +21,11 @@ export default async function Page(props: {
   const query = searchParams?.query || '';
   const currentPage = Number(searchParams?.page) || 1;
 
-  const totalPages = await fetchStudentsPages(query);
+  const {totalPages, totalStudents} = await fetchStudentsPages(query);
 
   return (
     <main>
-      <h1 className={`${kufi.className} mb-8 text-xl md:text-2xl`}>
+      <h1 className={`mb-8 text-xl md:text-2xl`}>
         الطلاب
       </h1>
       <div className="mt-4 flex items-center justify-between gap-2 md:mt-8">
@@ -34,7 +33,7 @@ export default async function Page(props: {
         <CreateButton entity="students" />
       </div>
       <Suspense key={query + currentPage} fallback={<StudentsTableSkeleton />}>
-        <CustomersTable query={query} currentPage={currentPage} />
+        <CustomersTable query={query} currentPage={currentPage} totalStudents={totalStudents} />
       </Suspense>
       <div className="mt-5 flex w-full justify-center">
         <Pagination totalPages={totalPages} />
