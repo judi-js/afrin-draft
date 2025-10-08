@@ -49,3 +49,15 @@ input[type="number"]::-webkit-outer-spin-button {
   border-radius: 4px;
   background: white; /* Ensure no background arrow */
 }
+
+body {
+  @apply bg-white text-black;
+}
+
+.dark body {
+  @apply bg-gray-900 text-white;
+}
+
+html {
+  scroll-behavior: smooth;
+}

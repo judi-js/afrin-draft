@@ -9,6 +9,7 @@ import QRCodeGenerator from '@/app/ui/students/QRCodeGenerator';
 import Modal from '@/app/ui/kits/modal';
 import { Student } from '@/app/lib/definitions';
 import { Button } from '@/app/ui/kits/button';
+import { useTheme } from 'next-themes';
 
 export function CreateButton({ entity }: { entity: "students" | "sessions" }) {
   return (
@@ -215,5 +216,24 @@ export function CheckButton({ id, date }: { id: string; date: string | null }) {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // Avoid hydration mismatch
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) return null;
+
+  return (
+    <button
+      onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+      className="p-2 rounded bg-gray-200 dark:bg-gray-800"
+    >
+      {theme === 'dark' ? '🌙' : '☀️'}
+    </button>
   );
 }

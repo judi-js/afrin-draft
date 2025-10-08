@@ -1,6 +1,6 @@
 import '@/app/ui/global.css';
 import { Metadata } from 'next';
-import Providers from './providers';
+import Providers from '@/app/providers';
 
 export const metadata: Metadata = {
   title: {
@@ -18,7 +18,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar">
-      <body dir="rtl" className="font-kufi antialiased">
+      <body dir="rtl" className="font-kufi antialiased" suppressHydrationWarning>
         <Providers>
           {children}
         </Providers>

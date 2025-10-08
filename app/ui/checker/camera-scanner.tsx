@@ -1,26 +1,36 @@
 "use client"
 
-import React, { useRef, useEffect, useState, SetStateAction, Dispatch } from 'react';
+import React, { useRef, useEffect, useState, Dispatch, SetStateAction } from 'react';
 import jsQR from 'jsqr';
 
-const CameraScanner: React.FC<{ onScan: (data: string) => void, setQrData: Dispatch<SetStateAction<string | null>> }> = ({ onScan, setQrData }) => {
+const CameraScanner: React.FC<{
+  onScan: (data: string) => void,
+  setQrData: Dispatch<SetStateAction<string | null>>
+}> = ({ onScan, setQrData }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [scanned, setScanned] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let stream: MediaStream;
     let animationId: number;
+
     const startCamera = async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            setLoading(false);
+            scanLoop();
+          };
         }
-        scanLoop();
-      } catch {
-        setError('يجب منح الإذن لاستخدام الكاميرا');
+      } catch (err: any) {
+        if (err.name === 'NotAllowedError') setError('تم رفض إذن الكاميرا');
+        else if (err.name === 'NotFoundError') setError('لم يتم العثور على كاميرا');
+        else setError('حدث خطأ أثناء تشغيل الكاميرا');
       }
     };
 
@@ -30,12 +40,13 @@ const CameraScanner: React.FC<{ onScan: (data: string) => void, setQrData: Dispa
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
+          const scale = 0.6; // downscale for performance
+          canvas.width = video.videoWidth * scale;
+          canvas.height = video.videoHeight * scale;
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
           const code = jsQR(imageData.data, imageData.width, imageData.height);
-          if (code && code.data) {
+          if (code?.data) {
             setScanned(true);
             onScan(code.data);
           }
@@ -45,25 +56,35 @@ const CameraScanner: React.FC<{ onScan: (data: string) => void, setQrData: Dispa
     };
 
     startCamera();
+
     return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
+      if (stream) stream.getTracks().forEach(track => track.stop());
       cancelAnimationFrame(animationId);
     };
-  }, [onScan, scanned]);
-
-
-  // Hidden canvas for frame processing
+  }, [onScan]);
 
   return (
-    <div className='flex flex-col items-center'>
-      <div style={{ position: 'relative', width: '100%', maxWidth: 400, borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
-        <video ref={videoRef} autoPlay playsInline style={{ width: '100%', borderRadius: 16 }} />
+    <div className="flex flex-col items-center">
+      <div className="relative w-full max-w-sm rounded-xl overflow-hidden shadow-lg">
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          aria-label="QR Scanner"
+          className="w-full rounded-xl"
+        />
+        {loading && !error && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white">
+            جار فتح الكاميرا...
+          </div>
+        )}
+        {error && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white">
+            تعذر فتح الكاميرا...
+          </div>
+        )}
         {scanned && (
-          <div
-            className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-md"
-          >
+          <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-md">
             <button
               className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-semibold shadow-lg hover:scale-105 transition-transform duration-200"
               onClick={() => {
@@ -78,7 +99,11 @@ const CameraScanner: React.FC<{ onScan: (data: string) => void, setQrData: Dispa
         )}
       </div>
       <canvas ref={canvasRef} style={{ display: 'none' }} />
-      {error && <div className="w-full text-red-500 mt-2 font-semibold bg-red-100 rounded px-3 py-2 shadow">{error}</div>}
+      {error && (
+        <div role="alert" className="text-red-500 mt-2 font-semibold bg-red-100 rounded px-3 py-2 shadow">
+          {error}
+        </div>
+      )}
     </div>
   );
 };
