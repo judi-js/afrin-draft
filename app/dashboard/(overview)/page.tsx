@@ -9,10 +9,9 @@ import {
 } from '@/app/ui/kits/skeletons';
 
 export default async function Page() {
-
   return (
     <main>
-      <h1 className={`mb-4 text-xl md:text-2xl`}>
+      <h1 className="mb-4 text-xl md:text-2xl text-gray-900 dark:text-gray-100">
         لوحة البيانات
       </h1>
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -31,3 +30,4 @@ export default async function Page() {
     </main>
   );
 }
+

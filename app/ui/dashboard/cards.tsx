@@ -40,11 +40,7 @@ export default async function CardWrapper() {
   );
 }
 
-export function Card({
-  title,
-  value,
-  type,
-}: {
+export function Card({ title, value, type }: {
   title: string;
   value: number | string;
   type: 'sessions' | 'students' | 'grades';
@@ -52,15 +48,12 @@ export function Card({
   const Icon = iconMap[type];
 
   return (
-    <div className="rounded-xl bg-gray-50 p-2 shadow-sm">
+    <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-2 shadow-sm">
       <div className="flex p-4">
-        {Icon ? <Icon className="h-5 w-5 text-gray-700" /> : null}
-        <h3 className="mr-2 text-sm font-medium">{title}</h3>
+        {Icon ? <Icon className="h-5 w-5 text-gray-700 dark:text-gray-300" /> : null}
+        <h3 className="mr-2 text-sm font-medium text-gray-800 dark:text-gray-200">{title}</h3>
       </div>
-      <p
-        className={`
-          truncate rounded-xl bg-white px-4 py-8 text-center text-2xl`}
-      >
+      <p className="truncate rounded-xl bg-white dark:bg-gray-700 px-4 py-8 text-center text-2xl text-gray-900 dark:text-gray-100">
         {value}
       </p>
     </div>

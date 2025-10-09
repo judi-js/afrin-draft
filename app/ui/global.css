@@ -61,3 +61,9 @@ body {
 html {
   scroll-behavior: smooth;
 }
+
+@keyframes shimmer-rtl {
+  100% {
+    transform: translateX(-100%);
+  }
+}

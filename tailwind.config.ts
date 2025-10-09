@@ -25,11 +25,12 @@ const config: Config = {
         foreground: "var(--foreground)",
       },
       keyframes: {
-        shimmer: {
-          "100%": {
-            transform: "translateX(100%)",
-          },
+        "shimmer-rtl": {
+          "100%": { transform: "translateX(-100%)" },
         },
+      },
+      animation: {
+        "shimmer-rtl": "shimmer-rtl 2s infinite",
       },
     },
   },
